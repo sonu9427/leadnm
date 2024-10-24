@@ -2,30 +2,33 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use App\Imports\ProductsImport;
-use Maatwebsite\Excel\Facades\Excel;
 use App\Models\Product;
+use Illuminate\Http\Request;
 
 class ProductController extends Controller
 {
-    public function index()
+    public function index(Request $request)
     {
-        $products = Product::all();
+        $query = Product::with('category');
 
-        return view('import',compact('products'));
-    }
+       // Check if a price range filter is applied
+        if ($request->price_range) {
+            [$min, $max] = explode('-', $request->price_range);
+            $query->whereBetween('total_paid', [(int)$min, (int)$max]);
+        }
 
-    public function import(Request $request) 
-    {
-        $file = $request->file;
-        $ext = $file->getClientOriginalExtension();
-        $fileName = time().'.'.$ext;
-        $file->move(public_path().'/uploads/',$fileName); 
+        // if ($request->min_price !== null && $request->max_price !== null) {
+        //     $query->whereBetween('total_paid', [(int)$request->min_price, (int)$request->max_price]);
+        // }
 
-        $path = public_path().'/uploads/'.$fileName;
-       Excel::import(new ProductsImport,  $path);
-        
-        return redirect(route('products.import'))->with('success', 'All good!');
+        if ($request->ajax()) {
+            return datatables()->of($query)
+                ->addColumn('category_name', function ($row) {
+                    return $row->category->category_name ?? 'N/A';
+                })
+                ->make(true);
+        }
+
+        return view('product');
     }
 }
