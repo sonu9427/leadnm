@@ -1,0 +1,13 @@
+Baranch Name : test1
+
+git add.
+
+git commit -m "ff"
+
+git push 
+------------------------------------------
+Baranch Name : main
+
+git checkout main
+git merge test1
+git push
