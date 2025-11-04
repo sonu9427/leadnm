@@ -1,0 +1,242 @@
+
+Angular 19
+
+
+i create three tab using Boostrap i give * meaning validation is full fill then Continue button working.
+
+Job Type and  Other Detail tab is diasbled mode
+
+Basic Detail  is only enbled mode
+
+
+1) Basic Detail
+2) Job Type
+3) Shift Time
+
+
+1) Basic Detail
+
+First Name(*)      LastName(*)
+
+Gender          Age  
+
+   <button>Continue</button  
+
+2) Job Type
+
+Job Type - full time & part time(*) drop down
+
+Job Title - Web developer drop down
+
+    <button>Continue</button     
+
+3) Other Detail
+
+  Shift Time(*)    Over time
+
+    <button>Submit</button       
+
+
+--------------------------------------------------------
+
+import { Component } from '@angular/core';
+import { FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { ReactiveFormsModule } from '@angular/forms';
+
+@Component({
+  selector: 'app-profile',
+  templateUrl: './profile.component.html',
+})
+export class ProfileComponent {
+  currentTab: string = 'basic';
+  tabsEnabled = { jobType: false, other: false };
+
+  basicForm: FormGroup;
+  jobForm: FormGroup;
+  otherForm: FormGroup;
+
+  constructor(private fb: FormBuilder) {
+    this.basicForm = this.fb.group({
+      firstName: ['', Validators.required],
+      lastName: ['', Validators.required],
+      gender: [''],
+      age: [''],
+    });
+
+    this.jobForm = this.fb.group({
+      jobType: ['', Validators.required],
+      jobTitle: [''],
+    });
+
+    this.otherForm = this.fb.group({
+      shiftTime: ['', Validators.required],
+      overTime: [''],
+    });
+  }
+
+  switchTab(tab: string) {
+    this.currentTab = tab;
+  }
+
+  continueFromBasic() {
+    if (this.basicForm.valid) {
+      this.tabsEnabled.jobType = true;
+      this.currentTab = 'jobType';
+    } else {
+      this.basicForm.markAllAsTouched();
+    }
+  }
+
+  continueFromJob() {
+    if (this.jobForm.valid) {
+      this.tabsEnabled.other = true;
+      this.currentTab = 'other';
+    } else {
+      this.jobForm.markAllAsTouched();
+    }
+  }
+
+  onSubmit() {
+    if (this.otherForm.valid) {
+      const allData = {
+        ...this.basicForm.value,
+        ...this.jobForm.value,
+        ...this.otherForm.value,
+      };
+      console.log('Form submitted:', allData);
+      alert('Form successfully submitted!');
+    }
+  }
+}
+
+
+----------------------------------------------
+
+
+<div class="container mt-4">
+  <ul class="nav nav-tabs">
+    <li class="nav-item">
+      <button
+        class="nav-link"
+        [class.active]="currentTab === 'basic'"
+        [disabled]="false"
+        (click)="switchTab('basic')"
+      >
+        Basic Detail
+      </button>
+    </li>
+    <li class="nav-item">
+      <button
+        class="nav-link"
+        [class.active]="currentTab === 'jobType'"
+        [disabled]="!tabsEnabled.jobType"
+        (click)="switchTab('jobType')"
+      >
+        Job Type
+      </button>
+    </li>
+    <li class="nav-item">
+      <button
+        class="nav-link"
+        [class.active]="currentTab === 'other'"
+        [disabled]="!tabsEnabled.other"
+        (click)="switchTab('other')"
+      >
+        Other Detail
+      </button>
+    </li>
+  </ul>
+
+  <!-- Basic Detail -->
+  <div class="tab-content border p-3 mt-3" *ngIf="currentTab === 'basic'">
+    <form [formGroup]="basicForm">
+      <div class="mb-3">
+        <label>First Name *</label>
+        <input formControlName="firstName" class="form-control" />
+      </div>
+      <div class="mb-3">
+        <label>Last Name *</label>
+        <input formControlName="lastName" class="form-control" />
+      </div>
+      <div class="mb-3">
+        <label>Gender</label>
+        <input formControlName="gender" class="form-control" />
+      </div>
+      <div class="mb-3">
+        <label>Age</label>
+        <input formControlName="age" type="number" class="form-control" />
+      </div>
+      <button
+        class="btn btn-primary"
+        type="button"
+        (click)="continueFromBasic()"
+      >
+        Continue
+      </button>
+    </form>
+  </div>
+
+  <!-- Job Type -->
+  <div class="tab-content border p-3 mt-3" *ngIf="currentTab === 'jobType'">
+    <form [formGroup]="jobForm">
+      <div class="mb-3">
+        <label>Job Type *</label>
+        <select formControlName="jobType" class="form-select">
+          <option value="">Select</option>
+          <option>Full Time</option>
+          <option>Part Time</option>
+        </select>
+      </div>
+      <div class="mb-3">
+        <label>Job Title</label>
+        <select formControlName="jobTitle" class="form-select">
+          <option value="">Select</option>
+          <option>Web Developer</option>
+          <option>Designer</option>
+        </select>
+      </div>
+      <button class="btn btn-primary" type="button" (click)="continueFromJob()">
+        Continue
+      </button>
+    </form>
+  </div>
+
+  <!-- Other Detail -->
+  <div class="tab-content border p-3 mt-3" *ngIf="currentTab === 'other'">
+    <form [formGroup]="otherForm" (ngSubmit)="onSubmit()">
+      <div class="mb-3">
+        <label>Shift Time *</label>
+        <input formControlName="shiftTime" class="form-control" />
+      </div>
+      <div class="mb-3">
+        <label>Over Time</label>
+        <input formControlName="overTime" class="form-control" />
+      </div>
+      <button
+        class="btn btn-success"
+        type="submit"
+        [disabled]="!otherForm.valid"
+      >
+        Submit
+      </button>
+    </form>
+  </div>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+        
