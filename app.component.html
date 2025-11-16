@@ -1,0 +1,256 @@
+<style>
+  .disabled {
+    pointer-events: none; /* Disable clicking */
+    opacity: 0.5; /* Make it look faded */
+  }
+</style>
+<h3 style="text-align: center">IT-Professionals by Muhammad Yousaf</h3>
+<br />
+<br />
+
+<br />
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <style></style>
+  </head>
+  <body>
+    <div class="container-xl">
+      <div class="table-responsive">
+        <div class="table-wrapper">
+          <div class="table-title">
+            <div class="row">
+              <div class="col-sm-1">
+                <h2>Users <b></b></h2>
+              </div>
+              <div class="col-sm-7 d-flex gap-2">
+                <!-- <Button
+                  data-toggle="modal"
+                  data-target="#Modal_add"
+                  class="btn btn-primary"
+                  >Add</Button
+                > -->
+
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  data-bs-toggle="modal"
+                  data-bs-target="#Modal_add"
+                >
+                  Add
+                </button>
+                <button
+                  type="button"
+                  class="btn btn-primary"
+                  (click)="updateChk()"
+                >
+                  Update
+                </button>
+              </div>
+              <div class="col-sm-4">
+                <div class="search-box">
+                  <input
+                    type="text"
+                    class="form-control"
+                    placeholder="Search&hellip;"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+          <table class="table table-striped table-hover table-bordered">
+            <thead>
+              <tr>
+                <th>Chk</th>
+                <th>#</th>
+                <th>Name <i class="fa fa-sort"></i></th>
+                <th>Mobile</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr
+                *ngFor="let user of users; let i = index"
+                [class.disabled]="user.is_checked?.toLowerCase() === 'yes'"
+              >
+                <td>
+                  <input
+                    type="checkbox"
+                    class="form-check-input"
+                    [value]="user"
+                    (change)="onCheckboxChange($event, user)"
+                    [disabled]="user.is_checked?.toLowerCase() === 'yes'"
+                  />
+                </td>
+                <td>{{ i + 1 }}</td>
+                <td>{{ user.name }}</td>
+                <td>{{ user.mobile }}</td>
+
+                <td>
+                  <a
+                    href="#"
+                    class="text-warning"
+                    data-toggle="tooltip"
+                    data-toggle="modal"
+                    data-target="#Modal_update"
+                    [class.disabled]="user.is_checked?.toLowerCase() === 'yes'"
+                    >Update</a
+                  >
+
+                  <a
+                    href="#"
+                    class="text-danger"
+                    data-toggle="tooltip"
+                    [class.disabled]="user.is_checked?.toLowerCase() === 'yes'"
+                    >Delete</a
+                  >
+                </td>
+              </tr>
+            </tbody>
+
+            <!-- <tbody [class.disabled]="showdivDisabled">
+              <tr *ngFor="let user of users; let i = index">
+                <td>
+                  <input
+                    type="checkbox"
+                    class="form-check-input"
+                    [value]="user"
+                    (change)="onCheckboxChange($event, user)"
+                  />
+                </td>
+                <td>{{ i + 1 }}</td>
+                <td>{{ user.name }}</td>
+                <td>{{ user.mobile }}</td>
+
+                <td>
+                  <a
+                    href="#"
+                    class="text-warning"
+                    data-toggle="tooltip"
+                    data-toggle="modal"
+                    data-target="#Modal_update"
+                    >Update</a
+                  >
+                  <a href="#" class="text-danger" data-toggle="tooltip"
+                    >Delete</a
+                  >
+                </td>
+              </tr>
+            </tbody> -->
+          </table>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
+
+<!-- Modal-Add -->
+<div
+  class="modal fade"
+  id="Modal_add"
+  tabindex="-1"
+  role="dialog"
+  aria-labelledby="exampleModalLabel"
+  aria-hidden="true"
+>
+  <form [formGroup]="addForm" (ngSubmit)="addUser()">
+    <div class="modal-dialog" role="document">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="exampleModalLabel">Add</h5>
+          <button
+            type="button"
+            class="close"
+            data-dismiss="modal"
+            aria-label="Close"
+          >
+            <span aria-hidden="true">&times;</span>
+          </button>
+        </div>
+        <div class="modal-body">
+          <div class="row">
+            <div class="col-md-6">Name</div>
+            <div class="col-md-6">Mobile</div>
+          </div>
+          <div class="row">
+            <div class="col-md-6">
+              <input
+                id="addInputName"
+                formControlName="name"
+                class="form-control"
+              />
+            </div>
+            <div class="col-md-6">
+              <input
+                id="addInputMobile"
+                formControlName="mobile"
+                class="form-control"
+              />
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button
+            type="button"
+            class="btn btn-secondary"
+            data-bs-dismiss="modal"
+          >
+            Close
+          </button>
+          <!-- <button type="button" class="btn btn-primary" data-bs-dismiss="modal">
+            Add New User
+          </button> -->
+          <button type="submit" class="btn btn-primary">Add New User</button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>
+<!-- Modal-Update -->
+<div
+  class="modal fade"
+  id="Modal_update"
+  tabindex="-1"
+  role="dialog"
+  aria-labelledby="exampleModalLabel"
+  aria-hidden="true"
+>
+  <div class="modal-dialog" role="document">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="exampleModalLabel">Update</h5>
+        <button
+          type="button"
+          class="close"
+          data-dismiss="modal"
+          aria-label="Close"
+        >
+          <span aria-hidden="true">&times;</span>
+        </button>
+      </div>
+      <div class="modal-body">
+        <div class="row">
+          <div class="col-md-6">Name</div>
+          <div class="col-md-6">Mobile</div>
+        </div>
+        <div class="row">
+          <div class="col-md-6">
+            <input id="updateInputName" class="form-control" />
+          </div>
+          <div class="col-md-6">
+            <input id="updateInputMobile" class="form-control" />
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-secondary" data-dismiss="modal">
+          Close
+        </button>
+        <button type="button" class="btn btn-primary" data-dismiss="modal">
+          Save changes
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
