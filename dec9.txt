@@ -1,0 +1,184 @@
+अब मैं आपको **एकदम simple, step-by-step और 100% clear तरीके से** समझाऊँगा कि:
+
+# ⭐ “नए Employee join होते समय `leave_balances` table में employee_id और leave_type_id कैसे insert होते हैं?”
+
+Laravel में यह काम **automatically** कराया जाता है।
+
+---
+
+# 🟩 **IMPORTANT CONCEPT (सिस्टम कैसे काम करता है)**
+
+जब कोई नया employee join करता है:
+
+1. HR पहले से `leave_types` table में leave categories डाल चुका होता है
+2. अब हर नए employee को हर leave type के लिए एक *wallet* चाहिए
+3. इस wallet को ही `leave_balances` table में record के रूप में store किया जाता है
+
+इसलिए जब employee join करे →
+**सारे leave_types पढ़कर उसी employee_id के साथ सभी leave_type_id डाल दिए जाते हैं**।
+
+---
+
+# 🟦 **STEP–1: Employee Join API / Create Employee**
+
+मान लो आपका employee create API कुछ ऐसा है:
+
+```php
+public function store(Request $req)
+{
+    $user = User::create([
+        'name' => $req->name,
+        'email' => $req->email,
+        'password' => bcrypt($req->password),
+        'probation_end_date' => $req->probation_end_date
+    ]);
+
+    // 👇 important: leave balances initialize
+    $this->initializeLeaveWallet($user->id);
+
+    return response()->json(['message' => 'Employee Created', 'user' => $user]);
+}
+```
+
+---
+
+# 🟦 **STEP–2: Leave Balances Insert करने वाला Function**
+
+👉 यह function सभी leave types पढ़कर
+👉 हर leave type के लिए एक row create करेगा
+
+`app/Services/LeaveService.php` (or Controller में भी रख सकते हैं)
+
+```php
+public function initializeLeaveWallet($employee_id)
+{
+    // सभी leave types निकालें
+    $leaveTypes = LeaveType::all();
+
+    // हर leave type के लिए balance create करें
+    foreach ($leaveTypes as $lt) {
+
+        LeaveBalance::create([
+            'employee_id'   => $employee_id,
+            'leave_type_id' => $lt->id,
+            'allocated'     => 0,
+            'used'          => 0,
+            'pending'       => 0,
+            'remaining'     => 0,
+        ]);
+    }
+}
+```
+
+✔ इस function की वजह से,
+**employee join होते ही leave_balances में 1 employee के लिए कई rows बन जाएँगी।**
+
+---
+
+# 🟦 **STEP–3: कौन-कौन सी rows insert होंगी?**
+
+मान लो leave_types में ये 2 rows हैं:
+
+| leave_type_id | name         |
+| ------------- | ------------ |
+| 1             | Casual Leave |
+| 2             | Sick Leave   |
+
+और new employee Ravi का `employee_id = 101` है
+
+तो Laravel यह insert करेगा:
+
+```
+employee_id | leave_type_id | allocated | used | pending | remaining
+---------------------------------------------------------------------
+101         | 1             | 0         | 0    | 0       | 0
+101         | 2             | 0         | 0    | 0       | 0
+```
+
+👉 अब Ravi के लिए 2 leave wallets बन गए
+👉 अब अगले महीनों में accrual इन्हीं पर add होगी
+
+---
+
+# 🟦 **STEP–4: LeaveBalance Model**
+
+`app/Models/LeaveBalance.php`:
+
+```php
+class LeaveBalance extends Model
+{
+    protected $fillable = [
+        'employee_id',
+        'leave_type_id',
+        'allocated',
+        'used',
+        'pending',
+        'remaining',
+    ];
+}
+```
+
+---
+
+# 🟦 **FULL FLOW (हिन्दी में सारांश)**
+
+| Step | क्या होता है?                                    |
+| ---- | ------------------------------------------------ |
+| 1    | Employee join हुआ                                |
+| 2    | Laravel सभी leave types पढ़ता है                 |
+| 3    | हर leave type के लिए एक wallet बनाता है          |
+| 4    | उसी समय `leave_balances` table में entry जाती है |
+
+---
+
+# ⭐ Final Understanding (Very Simple Hindi)
+
+**Employee join होते ही**
+Laravel आपका employee_id उठाता है →
+`leave_types` से सारे leave_type_id उठाता है →
+और दोनों को मिलाकर `leave_balances` में rows insert करता है।
+
+---
+
+# 🟣 Want Sample Output Screenshot / Postman JSON Example?
+
+# 🟢 या चाहते हैं कि मैं इसे Observer / Event (EmployeeCreated) से auto-run कर दूँ?
+
+बस बताइए, मैं पूरा code दे दूँ।
+
+
+
+----------------------------------------------------------
+
+
+UPDATE leave_balances
+SET 
+    pending = pending + 2,
+    remaining = allocated - (used + (pending + 2))
+WHERE employee_id = 1 AND leave_type_id = 1;
+
+
+
+UPDATE leave_balances
+SET pending = pending + 2
+WHERE employee_id = 1 AND leave_type_id = 1;
+
+
+UPDATE leave_balances
+SET remaining = allocated - (used + pending)
+WHERE employee_id = 1 AND leave_type_id = 1;
+
+
+
+
+$balance->pending += $days;
+$balance->remaining = $balance->allocated - ($balance->used + $balance->pending);
+$balance->save();
+
+----------------------------------------------------------------------------------------------------
+
+
+
+
+
+
