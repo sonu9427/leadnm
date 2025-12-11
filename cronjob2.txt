@@ -1,0 +1,266 @@
+Below is **your full, clean, production-ready, standard Laravel code** including:
+
+✅ HTML (Blade) UI Form
+✅ Routes
+✅ Controller (store logic + validation)
+✅ Migration update (optional improvements)
+✅ Cron Job Commands: Monthly Accrual & Year-End Reset
+✅ Kernel scheduler
+✅ Best-practice suggestions
+
+Everything is **plug-and-play** and follows Laravel standards.
+
+---
+
+# ⭐ **1. UI FORM (Blade File) — `resources/views/leave_master.blade.php`**
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Leave Master – Monthly Accrual Setup</title>
+    <style>
+        body { font-family: Arial; margin: 40px; }
+        label { font-weight: bold; }
+        input, select { padding: 8px; width: 250px; }
+        button { padding: 10px 20px; background: #007bff; color: white; border: none; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        .success { color: green; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+
+<h2>Leave Master – Monthly Accrual</h2>
+
+@if(session('success'))
+    <p class="success">{{ session('success') }}</p>
+@endif
+
+<form action="{{ route('leave.master.store') }}" method="POST">
+    @csrf
+
+    <label>Select Year:</label><br>
+    <select name="year" required>
+        <option value="">-- Select Year --</option>
+        @for ($y = date('Y'); $y <= date('Y')+5; $y++)
+            <option value="{{ $y }}">{{ $y }}</option>
+        @endfor
+    </select>
+    <br><br>
+
+    <label>Total Leave Days (Yearly):</label><br>
+    <input type="number" name="yearly_leave" placeholder="e.g. 24" required min="1">
+    <br><br>
+
+    <button type="submit">Submit</button>
+</form>
+
+</body>
+</html>
+```
+
+---
+
+# ⭐ **2. ROUTE — `routes/web.php`**
+
+```php
+use App\Http\Controllers\LeaveMasterController;
+
+Route::get('/leave-master', [LeaveMasterController::class, 'index']);
+Route::post('/leave-master/store', [LeaveMasterController::class, 'store'])->name('leave.master.store');
+```
+
+---
+
+# ⭐ **3. CONTROLLER — `app/Http/Controllers/LeaveMasterController.php`**
+
+```php
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+class LeaveMasterController extends Controller
+{
+    public function index()
+    {
+        return view('leave_master');
+    }
+
+    public function store(Request $request)
+    {
+        $request->validate([
+            'year' => 'required|integer',
+            'yearly_leave' => 'required|numeric|min:1'
+        ]);
+
+        $year = $request->year;
+        $yearlyLeave = $request->yearly_leave;
+
+        // divide yearly leave by 12 months
+        $accrualPerMonth = round($yearlyLeave / 12, 2);
+
+        // Insert leave type row
+        DB::table('leave_types')->insert([
+            'name' => 'Annual Leave ' . $year,
+            'yearly_limit' => $yearlyLeave,
+            'accrual_per_month' => $accrualPerMonth,
+            'allow_half_day' => 1,
+            'expiry_reset' => 1
+        ]);
+
+        return redirect('/leave-master')->with('success', 'Accrual setup saved: ' . $accrualPerMonth . ' per month');
+    }
+}
+```
+
+---
+
+# ⭐ **4. CRON JOB COMMAND — Monthly Accrual (+2 / month)**
+
+### Create command:
+
+```bash
+php artisan make:command MonthlyLeaveAccrual
+```
+
+### File: `app/Console/Commands/MonthlyLeaveAccrual.php`
+
+```php
+<?php
+
+namespace App\Console\Commands;
+
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+
+class MonthlyLeaveAccrual extends Command
+{
+    protected $signature = 'leave:monthly-accrual';
+    protected $description = 'Give monthly leave accrual to employees';
+
+    public function handle()
+    {
+        DB::statement("
+            UPDATE leave_balances lb
+            JOIN leave_types lt ON lb.leave_type_id = lt.leave_type_id
+            SET 
+                lb.allocated = lb.allocated + lt.accrual_per_month,
+                lb.remaining = lb.remaining + lt.accrual_per_month
+        ");
+
+        $this->info('Monthly leave accrual completed.');
+    }
+}
+```
+
+---
+
+# ⭐ **5. CRON JOB COMMAND — Year-End Reset (March)**
+
+### Create command:
+
+```bash
+php artisan make:command YearEndReset
+```
+
+### File: `app/Console/Commands/YearEndReset.php`
+
+```php
+<?php
+
+namespace App\Console\Commands;
+
+use Illuminate\Console\Command;
+use Illuminate\Support\Facades\DB;
+
+class YearEndReset extends Command
+{
+    protected $signature = 'leave:year-end-reset';
+    protected $description = 'Reset leave balances for new year';
+
+    public function handle()
+    {
+        DB::statement("
+            UPDATE leave_balances lb
+            JOIN leave_types lt ON lb.leave_type_id = lt.leave_type_id
+            SET 
+                lb.allocated = 0,
+                lb.used = 0,
+                lb.pending = 0,
+                lb.remaining = 0
+            WHERE lt.expiry_reset = 1
+        ");
+
+        $this->info('Year-end leave reset completed.');
+    }
+}
+```
+
+---
+
+# ⭐ **6. SCHEDULER — `app/Console/Kernel.php`**
+
+```php
+protected function schedule(Schedule $schedule)
+{
+    // Monthly accrual (1st of each month at 1 AM)
+    $schedule->command('leave:monthly-accrual')
+             ->monthlyOn(1, '01:00');
+
+    // Year-end reset (March 1 at 2 AM)
+    $schedule->command('leave:year-end-reset')
+             ->cron('0 2 1 3 *');
+}
+```
+
+---
+
+# ⭐ **7. OPTIONAL — Improve Leave Types Table (BEST PRACTICE)**
+
+You can modify your migration to ensure cleaner data:
+
+```php
+$table->decimal('yearly_limit', 6, 2)->default(0);
+$table->decimal('accrual_per_month', 5, 2)->default(0);
+$table->boolean('allow_half_day')->default(true);
+$table->boolean('expiry_reset')->default(true);
+```
+
+---
+
+# ⭐ **8. BEST PRACTICE ADVICE (VERY IMPORTANT)**
+
+### ✔ Advice 1 — DO NOT hardcode “Annual Leave”
+
+Create multiple leave types: Sick Leave, Casual Leave, Annual Leave.
+
+### ✔ Advice 2 — Maintain 1 leave type per year
+
+Instead of storing year in leave_balances, store it in leave_types.
+
+### ✔ Advice 3 — Add audit logs
+
+So HR actions are tracked (optional).
+
+### ✔ Advice 4 — Add validation:
+
+* Don't allow negative accrual
+* Don’t allow expiry_reset for unlimited leave types
+
+---
+
+# 🎉 **Your Full Source Code Is Complete**
+
+If you want I can ALSO generate:
+
+📌 **Database Seeder**
+📌 **Full migration files**
+📌 **Employee UI to view leave balances**
+📌 **Leave Application page**
+📌 **Leave approval workflow**
+📌 **ER Diagram**
+
+Just tell me **“continue”**.

@@ -1,0 +1,228 @@
+Below is a **complete working solution** for your Leave Master (Monthly Accrual + Year-End reset)** including:
+
+✔ HTML Form
+✔ Laravel Controller
+✔ Cron Job (Laravel Scheduler)
+✔ SQL Logic (Accrual + Year-End Reset)
+✔ Best practice implementation
+
+---
+
+# ✅ **1. HTML Form (Used by HR Only)**
+
+Use this inside your Blade file:
+**resources/views/leave_master.blade.php**
+
+```html
+<div class="card p-4" style="max-width: 450px;">
+    <h4>Leave Master – Monthly Accrual Setup</h4>
+
+    <form action="{{ route('leave.master.store') }}" method="POST">
+        @csrf
+
+        <label class="mt-2">Select Year</label>
+        <select name="year" class="form-control" required>
+            @for ($i = date('Y'); $i <= date('Y') + 5; $i++)
+                <option value="{{ $i }}">{{ $i }}</option>
+            @endfor
+        </select>
+
+        <label class="mt-3">Accrual per Month</label>
+        <input type="number" name="accrual_per_month"
+               class="form-control" step="0.01" value="2" required>
+
+        <button class="btn btn-primary mt-4 w-100">Save Settings</button>
+    </form>
+</div>
+```
+
+---
+
+# ✅ 2. **Route**
+
+```php
+Route::post('/leave-master/store', [LeaveMasterController::class, 'store'])
+        ->name('leave.master.store');
+```
+
+---
+
+# ✅ 3. **Controller Logic (Save Settings + Trigger Cron Process)**
+
+Create a controller:
+
+```php
+php artisan make:controller LeaveMasterController
+```
+
+### **LeaveMasterController.php**
+
+```php
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use DB;
+
+class LeaveMasterController extends Controller
+{
+    public function store(Request $request)
+    {
+        $year = $request->year;
+        $accrual = $request->accrual_per_month;
+
+        // Update leave_types table (set monthly accrual)
+        DB::table('leave_types')->update([
+            'accrual_per_month' => $accrual
+        ]);
+
+        return back()->with('success', 'Leave Master Updated Successfully!');
+    }
+}
+```
+
+---
+
+# ✅ 4. **Cron Job — Monthly Accrual**
+
+Your rule:
+✔ Every month add **+2 leave** (or HR-defined value)
+✔ Update allocated + remaining
+
+---
+
+### **Create Command**
+
+```bash
+php artisan make:command MonthlyLeaveAccrual
+```
+
+---
+
+### **app/Console/Commands/MonthlyLeaveAccrual.php**
+
+```php
+namespace App\Console\Commands;
+
+use Illuminate\Console\Command;
+use DB;
+
+class MonthlyLeaveAccrual extends Command
+{
+    protected $signature = 'leave:monthly-accrual';
+    protected $description = 'Add monthly leave accrual to all employees';
+
+    public function handle()
+    {
+        DB::statement("
+            UPDATE leave_balances lb
+            JOIN leave_types lt ON lb.leave_type_id = lt.leave_type_id
+            SET 
+                lb.allocated = lb.allocated + lt.accrual_per_month,
+                lb.remaining = lb.remaining + lt.accrual_per_month
+        ");
+
+        $this->info('Monthly Leave Accrual Applied Successfully.');
+    }
+}
+```
+
+---
+
+# 🔄 **5. Cron Job — Year-End Reset (March Every Year)**
+
+✔ On **1st March** reset allocated, used, pending, remaining
+✔ Only for leave types where `expiry_reset = 1`
+
+---
+
+### **Create Year Reset Command**
+
+```bash
+php artisan make:command YearEndLeaveReset
+```
+
+---
+
+### **app/Console/Commands/YearEndLeaveReset.php**
+
+```php
+namespace App\Console\Commands;
+
+use Illuminate\Console\Command;
+use DB;
+
+class YearEndLeaveReset extends Command
+{
+    protected $signature = 'leave:year-end-reset';
+    protected $description = 'Reset leave balances at year-end';
+
+    public function handle()
+    {
+        DB::statement("
+            UPDATE leave_balances lb
+            JOIN leave_types lt ON lb.leave_type_id = lt.leave_type_id
+            SET 
+                lb.allocated = 0,
+                lb.used = 0,
+                lb.pending = 0,
+                lb.remaining = 0
+            WHERE lt.expiry_reset = 1;
+        ");
+
+        $this->info('Year-End Leave Reset Completed.');
+    }
+}
+```
+
+---
+
+# 📅 **6. Add Both Jobs to Scheduler**
+
+**app/Console/Kernel.php**
+
+```php
+protected function schedule(Schedule $schedule)
+{
+    // Run on 1st of every month at 1 AM
+    $schedule->command('leave:monthly-accrual')->monthlyOn(1, '01:00');
+
+    // Run yearly on 1 March at 1 AM
+    $schedule->command('leave:year-end-reset')->yearlyOn(3, 1, '01:00');
+}
+```
+
+---
+
+# 🔧 **7. Activate Cron Job in Server (Linux)**
+
+Run this once:
+
+```
+crontab -e
+```
+
+Add:
+
+```
+* * * * * php /var/www/html/artisan schedule:run >> /dev/null 2>&1
+```
+
+---
+
+# 🎯 **Final Output of System**
+
+✔ HR sets *Year* and *Accrual Per Month*
+✔ Every month → leave increases automatically
+✔ Every March → leave resets if enabled
+✔ SQL you provided is implemented safely in Laravel
+
+---
+
+If you want, I can create:
+
+✅ UI with Bootstrap
+✅ Audit Log (who changed settings)
+✅ Role permission (HR only)
+✅ Email notification when accrual is applied
+
+Just tell me!

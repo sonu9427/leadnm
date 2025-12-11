@@ -1,0 +1,226 @@
+Below is the **complete step-by-step flow**, including:
+
+✅ HTML UI Form
+✅ Logic for dividing yearly leave by 12
+✅ How clicking submit stores the monthly accrual (e.g., +2)
+✅ How to run a **monthly cron job in Laravel** to add +2 automatically
+✅ How to run a **Year-End Reset (March)**
+✅ SQL logic used inside cron
+
+---
+
+# ✅ **1️⃣ UI FORM — “Leave Master – Monthly Accrual” (HTML)**
+
+This is a simple static HTML file (HR will fill Year + Total Leave Days):
+
+```html
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Leave Master - Monthly Accrual</title>
+</head>
+<body>
+
+<h2>Leave Master - Monthly Accrual Setup</h2>
+
+<form action="/leave-master/store" method="POST">
+    
+    <!-- Laravel CSRF Token if required -->
+    <input type="hidden" name="_token" value="{{ csrf_token() }}">
+
+    <label>Select Year:</label>
+    <select name="year" required>
+        <option value="">-- Select Year --</option>
+        <option value="2025">2025</option>
+        <option value="2026">2026</option>
+        <option value="2027">2027</option>
+    </select>
+    <br><br>
+
+    <label>Total Leave Days (Yearly):</label>
+    <input type="number" name="yearly_leave" placeholder="e.g. 24" required>
+    <br><br>
+
+    <button type="submit">Submit</button>
+
+</form>
+
+</body>
+</html>
+```
+
+---
+
+# ✅ **2️⃣ FORM LOGIC — Divide Days by 12 (Example: 24 ÷ 12 = 2)**
+
+When HR submits:
+
+### Input
+
+* Year = 2026
+* Days = 24
+
+### Backend Laravel Controller
+
+This stores:
+✔ yearly_limit = 24
+✔ accrual_per_month = `24 / 12 = 2`
+
+```php
+public function store(Request $request)
+{
+    $year  = $request->year;
+    $days  = $request->yearly_leave;
+
+    $accrual = $days / 12; // Example: 24/12 = 2
+
+    // Save into leave_types table (just example)
+    DB::table('leave_types')->insert([
+        'name' => 'Annual Leave ' . $year,
+        'yearly_limit' => $days,
+        'accrual_per_month' => $accrual,
+        'allow_half_day' => 1,
+        'expiry_reset' => 1
+    ]);
+
+    return back()->with('success', 'Monthly accrual saved successfully!');
+}
+```
+
+---
+
+# ✅ **3️⃣ MONTHLY ACCRUAL CRON JOB (Every Month Add +2)**
+
+This cron job:
+
+✔ Runs every 1st day of month
+✔ Reads `accrual_per_month` from `leave_types`
+✔ Updates `allocated` and `remaining` in `leave_balances`
+
+---
+
+## **Step A — Create Laravel Command**
+
+```bash
+php artisan make:command MonthlyLeaveAccrual
+```
+
+### **app/Console/Commands/MonthlyLeaveAccrual.php**
+
+```php
+public function handle()
+{
+    DB::statement("
+        UPDATE leave_balances lb
+        JOIN leave_types lt ON lb.leave_type_id = lt.leave_type_id
+        SET 
+            lb.allocated = lb.allocated + lt.accrual_per_month,
+            lb.remaining = lb.remaining + lt.accrual_per_month
+    ");
+
+    $this->info('Monthly accrual completed.');
+}
+```
+
+---
+
+## **Step B — Register Command in Kernel**
+
+### **app/Console/Kernel.php**
+
+```php
+protected function schedule(Schedule $schedule)
+{
+    // Run on 1st day of every month at 1 A.M.
+    $schedule->command('monthly:accrual')->monthlyOn(1, '01:00');
+}
+```
+
+---
+
+# ✅ **4️⃣ YEAR-END RESET (Every March)**
+
+Example: March 2026 reset all balances to zero only for leave types where `expiry_reset = 1`.
+
+---
+
+## **Create Reset Command**
+
+```bash
+php artisan make:command YearEndReset
+```
+
+### **app/Console/Commands/YearEndReset.php**
+
+```php
+public function handle()
+{
+    DB::statement("
+        UPDATE leave_balances lb
+        JOIN leave_types lt ON lb.leave_type_id = lt.leave_type_id
+        SET 
+            lb.allocated = 0,
+            lb.used = 0,
+            lb.pending = 0,
+            lb.remaining = 0
+        WHERE lt.expiry_reset = 1
+    ");
+
+    $this->info('Year-end reset completed.');
+}
+```
+
+---
+
+## **Add Reset to Kernel (Run Every March 1st)**
+
+```php
+protected function schedule(Schedule $schedule)
+{
+    // Existing monthly accrual
+    $schedule->command('monthly:accrual')->monthlyOn(1, '01:00');
+
+    // Year-end reset in March
+    $schedule->command('yearend:reset')->cron('0 2 1 3 *');
+    // Runs March 1st 2 AM
+}
+```
+
+---
+
+# ✅ **5️⃣ FLOW SUMMARY (Full Process)**
+
+### **HR Action**
+
+1. HR opens Leave Master Form
+2. Selects year → enters 24 days
+3. System divides: 24 ÷ 12 = 2
+4. Saves `accrual_per_month = 2`
+
+---
+
+### **System Cron Jobs**
+
+#### ✔ Every Month
+
+* Adds +2 automatically:
+  `allocated += 2`
+  `remaining += 2`
+
+#### ✔ Every Year March 1
+
+Reset all leave balances where `expiry_reset = TRUE`
+
+---
+
+# 🎉 Done!
+
+If you want, I can also generate:
+
+✔ Laravel migration updates
+✔ Controller + route file
+✔ Blade UI instead of static HTML
+✔ Full Cron job files
+✔ Workflow diagram
+
+Just tell me!
