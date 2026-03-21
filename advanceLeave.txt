@@ -1,0 +1,249 @@
+
+
+https://chatgpt.com/s/t_69beccfa6d048191bebca6b095252056
+
+https://chatgpt.com/s/t_69bedc065fc08191bb2f80af9be63f0b
+
+https://chatgpt.com/s/t_69bedc2a81588191a0d7bd0c7fabda0f
+
+Route::post('/calculate-advance-leave', [LeaveController::class, 'calculateAdvanceLeave']);
+
+{
+  "startDate": "13-04-2026",
+  "endDate": "14-04-2026"
+}
+
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use Carbon\Carbon;
+use DB;
+
+class LeaveController extends Controller
+{
+    public function calculateAdvanceLeave(Request $request)
+    {
+        // 1. Input
+        $startDate = Carbon::createFromFormat('d-m-Y', $request->startDate);
+        $endDate   = Carbon::createFromFormat('d-m-Y', $request->endDate);
+
+        $userId = 2; // अभी static, बाद में auth से लेना
+        $leaveTypeId = 1;
+
+        // 2. Total days calculate
+        $totalDays = $startDate->diffInDays($endDate) + 1;
+
+        // 3. Month identify
+        $month = $startDate->format('Y-m');
+
+        // 4. Get current balance
+        $balance = DB::table('leave_balances')
+            ->where('user_id', $userId)
+            ->where('leave_type_id', $leaveTypeId)
+            ->first();
+
+        $currentBalance = $balance ? $balance->remaining : 0;
+
+        // 5. Get leave master (monthly accrual)
+        $leaveMaster = DB::table('leave_masters')
+            ->where('leave_type_id', $leaveTypeId)
+            ->first();
+
+        $accrualPerMonth = $leaveMaster->accrual_per_month ?? 0;
+
+        // 6. Check accrual log for this month
+        $accrualLog = DB::table('leave_accrual_logs')
+            ->where('user_id', $userId)
+            ->where('leave_type_id', $leaveTypeId)
+            ->where('month', $month)
+            ->first();
+
+        $accrued = 0;
+
+        // 7. If not accrued, add virtually
+        if (!$accrualLog) {
+            $accrued = $accrualPerMonth;
+        }
+
+        // 8. Available balance
+        $availableBalance = $currentBalance + $accrued;
+
+        // 9. Remaining after leave
+        $remaining = $availableBalance - $totalDays;
+
+        // 10. Status
+        $status = $remaining < 0 ? 'not_allowed' : 'allowed';
+
+        return response()->json([
+            'total_days' => $totalDays,
+            'current_balance' => $currentBalance,
+            'accrued' => $accrued,
+            'available_balance' => $availableBalance,
+            'remaining_after_leave' => $remaining,
+            'status' => $status
+        ]);
+    }
+}
+
+{
+  "total_days": 2,
+  "current_balance": 0,
+  "accrued": 2,
+  "available_balance": 2,
+  "remaining_after_leave": 0,
+  "status": "allowed"
+}
+
+
+public function applyLeave(Request $request)
+{
+    $startDate = Carbon::createFromFormat('d-m-Y', $request->startDate);
+    $endDate   = Carbon::createFromFormat('d-m-Y', $request->endDate);
+
+    $userId = auth()->id();
+    $leaveTypeId = $request->leave_type_id;
+
+    $totalDays = $startDate->diffInDays($endDate) + 1;
+    $month = $startDate->format('Y-m');
+
+    DB::beginTransaction();
+
+    try {
+        // 1. Get balance
+        $balance = DB::table('leave_balances')
+            ->where('user_id', $userId)
+            ->where('leave_type_id', $leaveTypeId)
+            ->lockForUpdate()
+            ->first();
+
+        $currentBalance = $balance ? $balance->remaining : 0;
+
+        // 2. Get accrual
+        $leaveMaster = DB::table('leave_masters')
+            ->where('leave_type_id', $leaveTypeId)
+            ->first();
+
+        $accrual = $leaveMaster->accrual_per_month ?? 0;
+
+        // 3. Check accrual log
+        $log = DB::table('leave_accrual_logs')
+            ->where('user_id', $userId)
+            ->where('leave_type_id', $leaveTypeId)
+            ->where('month', $month)
+            ->first();
+
+        if (!$log) {
+            // insert accrual log
+            DB::table('leave_accrual_logs')->insert([
+                'user_id' => $userId,
+                'leave_type_id' => $leaveTypeId,
+                'month' => $month,
+                'created_at' => now()
+            ]);
+
+            $currentBalance += $accrual;
+        }
+
+        $remaining = $currentBalance - $totalDays;
+
+        if ($remaining < 0) {
+            DB::rollBack();
+            return response()->json(['message' => 'Insufficient leave balance'], 400);
+        }
+
+        // 4. Insert leave application
+        DB::table('leave_applications')->insert([
+            'employee_id' => $userId,
+            'leave_type_id' => $leaveTypeId,
+            'start_date' => $startDate,
+            'end_date' => $endDate,
+            'total_days' => $totalDays,
+            'status' => 'Pending',
+            'created_at' => now()
+        ]);
+
+        // 5. Update balance
+        if ($balance) {
+            DB::table('leave_balances')
+                ->where('id', $balance->id)
+                ->update([
+                    'used' => $balance->used + $totalDays,
+                    'remaining' => $remaining,
+                    'updated_at' => now()
+                ]);
+        } else {
+            DB::table('leave_balances')->insert([
+                'user_id' => $userId,
+                'leave_type_id' => $leaveTypeId,
+                'allocated' => $accrual,
+                'used' => $totalDays,
+                'remaining' => $remaining,
+                'created_at' => now()
+            ]);
+        }
+
+        DB::commit();
+
+        return response()->json(['message' => 'Leave applied successfully']);
+
+    } catch (\Exception $e) {
+        DB::rollBack();
+        return response()->json(['error' => $e->getMessage()]);
+    }
+}
+
+
+-------------------------------------------------------------------------
+
+
+php artisan make:command MonthlyLeaveAccrual
+
+public function handle()
+{
+    $users = DB::table('users')->get();
+
+    $leaveMasters = DB::table('leave_masters')->get();
+
+    $month = now()->format('Y-m');
+
+    foreach ($users as $user) {
+        foreach ($leaveMasters as $leave) {
+
+            $exists = DB::table('leave_accrual_logs')
+                ->where('user_id', $user->id)
+                ->where('leave_type_id', $leave->leave_type_id)
+                ->where('month', $month)
+                ->exists();
+
+            if ($exists) continue;
+
+            // insert log
+            DB::table('leave_accrual_logs')->insert([
+                'user_id' => $user->id,
+                'leave_type_id' => $leave->leave_type_id,
+                'month' => $month,
+                'created_at' => now()
+            ]);
+
+            // update balance
+            DB::table('leave_balances')->updateOrInsert(
+                [
+                    'user_id' => $user->id,
+                    'leave_type_id' => $leave->leave_type_id
+                ],
+                [
+                    'allocated' => DB::raw('allocated + '.$leave->accrual_per_month),
+                    'remaining' => DB::raw('remaining + '.$leave->accrual_per_month),
+                    'updated_at' => now()
+                ]
+            );
+        }
+    }
+}
+
+protected function schedule(Schedule $schedule)
+{
+    $schedule->command('leave:accrual')->monthlyOn(1, '00:10');
+}
